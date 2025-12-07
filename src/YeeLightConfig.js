@@ -58,12 +58,26 @@ export default function YeeLightConfig(RED) {
 
         const startConnection = () => {
             node.log(`Connecting to Yeelight ${host}`);
-            node.yeelight = new Yeelight(`yeelight://${host}`);
-            node.yeelight.on('connect', onConnected);
-            node.yeelight.on('error', onYeelightError);
-            node.yeelight.on('disconnect', onDisconnected);
-
-            setNodeStatus(states.connecting);
+            try {
+                node.yeelight = new Yeelight(`yeelight://${host}`);
+                node.yeelight.on('connect', onConnected);
+                node.yeelight.on('error', error => {
+                    try {
+                        onYeelightError(error);
+                    } catch (err) {
+                        // Attraper toute exception fatale venant de yeelight2
+                        node.warn(`Caught Yeelight internal error: ${err.message}`);
+                        reconnectionTimeout = setTimeout(startConnection, RECONNETION_INTERVAL_SECS);
+                        setNodeStatus(states.error('internal'));
+                    }
+                });
+                node.yeelight.on('disconnect', onDisconnected);
+                setNodeStatus(states.connecting);
+            } catch (err) {
+                node.warn(`Yeelight failed to start: ${err.message}`);
+                reconnectionTimeout = setTimeout(startConnection, RECONNETION_INTERVAL_SECS);
+                setNodeStatus(states.error('internal'));
+            }
         };
 
         (function init() {
